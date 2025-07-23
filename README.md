@@ -2,8 +2,7 @@
 
 AutoClipper is a standalone Windows desktop application that downloads YouTube playlist videos and automatically clips them into segments of custom lengths. It includes both an Electron-based version and a Python GUI fallback.
 
-![AutoClipper UI]
-
+![AutoClipper UI](https://github.com/user-attachments/assets/9a9fe75d-f218-4a7e-9e44-716b7e9e6145)
 
 ---
 
