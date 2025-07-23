@@ -72,6 +72,19 @@ def ensure_binaries(base_dir: Path, log_callback: Callable[[str], None]) -> tupl
     return ytdlp, ffmpeg
 
 
+def confirm_binaries(ytdlp: Path, ffmpeg: Path, log_callback: Callable[[str], None]) -> bool:
+    """Run the binaries to ensure they work."""
+    rc, _ = _run_command([str(ytdlp), "--version"], log_callback)
+    if rc != 0:
+        log_callback("yt-dlp failed to run")
+        return False
+    rc, _ = _run_command([str(ffmpeg), "-version"], log_callback)
+    if rc != 0:
+        log_callback("ffmpeg failed to run")
+        return False
+    return True
+
+
 def download_and_clip_playlist(
     url: str,
     output_dir: Path,
@@ -88,11 +101,16 @@ def download_and_clip_playlist(
     """
     base_dir = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
     ytdlp_path, ffmpeg_path = ensure_binaries(base_dir, log_callback)
+    if not confirm_binaries(ytdlp_path, ffmpeg_path, log_callback):
+        raise RuntimeError("yt-dlp or ffmpeg failed to run. Please reinstall and try again.")
 
     browser = "chrome"
     if sys.platform == "win32":
         edge_path = Path(os.environ.get("USERPROFILE", "")) / "AppData" / "Local" / "Microsoft" / "Edge"
         browser = "edge" if edge_path.exists() else "chrome"
+
+    cookies_file = base_dir / "cookies.txt"
+    cookie_args = ["--cookies", str(cookies_file)] if cookies_file.exists() else ["--cookies-from-browser", browser]
 
 
     info_cmd = [
@@ -100,11 +118,22 @@ def download_and_clip_playlist(
         url,
         "--skip-download",
         "--dump-json",
-        "--cookies-from-browser", browser,
-    ]
+    ] + cookie_args
     rc, out = _run_command(info_cmd, log_callback)
+    if rc != 0 and cookie_args[0] == "--cookies-from-browser" and cookies_file.exists():
+        log_callback("Browser cookie extraction failed, trying cookies.txt")
+        info_cmd = [
+            str(ytdlp_path),
+            url,
+            "--skip-download",
+            "--dump-json",
+            "--cookies", str(cookies_file),
+        ]
+        rc, out = _run_command(info_cmd, log_callback)
     if rc != 0:
-        raise RuntimeError("Could not load playlist. This may be due to age restriction, region block, or bad link.")
+        raise RuntimeError(
+            "Could not load playlist. Login may be required. Please login to your browser or provide cookies.txt"
+        )
 
     videos = []
     playlist_title = url
@@ -132,7 +161,7 @@ def download_and_clip_playlist(
             str(ytdlp_path),
             f"https://www.youtube.com/watch?v={vid_id}",
             "-o", str(out_file),
-            "--cookies-from-browser", browser,
+        ] + cookie_args + [
             "-f", "bestvideo[ext=mp4]+bestaudio/best/best",
         ]
         log_callback(f"Downloading {title}")

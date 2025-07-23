@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 from datetime import datetime
 
-from clipper import download_and_clip_playlist, ensure_binaries
+from clipper import download_and_clip_playlist, ensure_binaries, confirm_binaries
 from utils import get_output_folder
 
 
@@ -75,8 +75,15 @@ class AutoClipperApp(ctk.CTk):
         self.log_box.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=5, pady=5)
         self.log_box.insert("end", self.log_var.get())
         self.log_box.configure(state="disabled")
-        self.url_entry = ctk.CTkEntry(main, textvariable=self.url_var, placeholder_text="Paste playlist URL here")
-        self.url_entry.grid(row=1, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
+        url_frame = ctk.CTkFrame(main, fg_color="transparent")
+        url_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
+        url_frame.grid_columnconfigure(0, weight=1)
+
+        self.url_entry = ctk.CTkEntry(url_frame, textvariable=self.url_var, placeholder_text="Paste playlist URL here")
+        self.url_entry.grid(row=0, column=0, sticky="ew")
+
+        ctk.CTkButton(url_frame, text="Copy", width=50, command=self.copy_url).grid(row=0, column=1, padx=(5, 0))
+        ctk.CTkButton(url_frame, text="Paste", width=50, command=self.paste_url).grid(row=0, column=2, padx=(5, 0))
         self._add_context_menu(self.url_entry)
         self._add_context_menu(self.log_box)
         self.clip_length = ctk.CTkComboBox(main, values=["5", "10", "15", "20", "25", "30", "60"], variable=self.clip_len_var)
@@ -146,6 +153,17 @@ class AutoClipperApp(ctk.CTk):
     def update_progress(self, value: float):
         self.progress_var.set(value)
 
+    def copy_url(self):
+        url = self.url_entry.get()
+        self.clipboard_clear()
+        self.clipboard_append(url)
+
+    def paste_url(self):
+        try:
+            self.url_var.set(self.clipboard_get())
+        except tk.TclError:
+            pass
+
     def open_output(self):
         output = get_output_folder()
         if any(output.glob("**/*")):
@@ -184,7 +202,10 @@ class AutoClipperApp(ctk.CTk):
 def main():
     base_dir = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
     try:
-        ensure_binaries(base_dir, lambda _m: None)
+        ytdlp, ffmpeg = ensure_binaries(base_dir, lambda _m: None)
+        if not confirm_binaries(ytdlp, ffmpeg, lambda _m: None):
+            messagebox.showerror("Error", "yt-dlp or ffmpeg failed to run. Please reinstall and try again.")
+            return
     except Exception as e:
         messagebox.showerror("Error", f"Failed to load dependencies: {e}")
         return
