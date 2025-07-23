@@ -94,8 +94,6 @@ def download_and_clip_playlist(
         edge_path = Path(os.environ.get("USERPROFILE", "")) / "AppData" / "Local" / "Microsoft" / "Edge"
         browser = "edge" if edge_path.exists() else "chrome"
 
-    session_dir = output_dir / "session"
-    session_dir.mkdir(exist_ok=True)
 
     info_cmd = [
         str(ytdlp_path),
@@ -125,7 +123,7 @@ def download_and_clip_playlist(
         if duration > 20 * 60:
             log_callback(f"Skipping {title} (longer than 20 min)")
             continue
-        out_file = session_dir / f"{vid_id}.{format}"
+        out_file = output_dir / f"{vid_id}.{format}"
         if out_file.exists():
             log_callback(f"Using cached {out_file.name}")
             videos.append((title, out_file))

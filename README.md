@@ -34,10 +34,10 @@ AutoClipper is a standalone Windows desktop application that downloads YouTube p
 Clips are saved to:
 
 ```
-C:\Users\YourName\Videos\AutoClipper_YYYY-MM-DD_HH-MM-SS\
+C:\Users\YourName\Videos\AutoClipperApp\
 ```
 
-Each video gets its own subfolder under the timestamped session folder.
+All videos and clips are placed directly inside this folder.
 
 ---
 
