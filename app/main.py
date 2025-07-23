@@ -1,8 +1,10 @@
 import customtkinter as ctk
 from tkinter import messagebox
+import tkinter as tk
 import threading
 import os
 import sys
+import subprocess
 from pathlib import Path
 
 from clipper import download_and_clip_playlist, ensure_binaries
@@ -14,6 +16,8 @@ class AutoClipperApp(ctk.CTk):
         self.title("AutoClipper")
         self.geometry("900x600")
         ctk.set_default_color_theme("dark-blue")
+        ctk.set_appearance_mode("dark")
+        ctk.set_widget_scaling(1.0)
 
         # variables
         self.url_var = ctk.StringVar()
@@ -26,6 +30,17 @@ class AutoClipperApp(ctk.CTk):
         self.progress_var = ctk.DoubleVar()
 
         self._build_ui()
+
+    def _add_context_menu(self, widget):
+        menu = tk.Menu(widget, tearoff=0)
+        menu.add_command(label="Cut", command=lambda: widget.event_generate("<<Cut>>"))
+        menu.add_command(label="Copy", command=lambda: widget.event_generate("<<Copy>>"))
+        menu.add_command(label="Paste", command=lambda: widget.event_generate("<<Paste>>"))
+
+        def show(event):
+            menu.tk_popup(event.x_root, event.y_root)
+
+        widget.bind("<Button-3>", show)
 
     def _build_ui(self):
         # configure grid
@@ -55,8 +70,10 @@ class AutoClipperApp(ctk.CTk):
         self.log_box.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=5, pady=5)
         self.log_box.insert("end", self.log_var.get())
         self.log_box.configure(state="disabled")
-        self.url_entry = ctk.CTkEntry(main, textvariable=self.url_var, placeholder_text="YouTube Playlist URL")
+        self.url_entry = ctk.CTkEntry(main, textvariable=self.url_var, placeholder_text="Paste playlist URL here")
         self.url_entry.grid(row=1, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
+        self._add_context_menu(self.url_entry)
+        self._add_context_menu(self.log_box)
         self.clip_length = ctk.CTkComboBox(main, values=["5", "10", "15", "20", "25", "30", "60"], variable=self.clip_len_var)
         self.clip_length.grid(row=2, column=0, padx=5, pady=5, sticky="ew")
         self.format_buttons = ctk.CTkSegmentedButton(main, values=["mp4", "webm", "mkv"], variable=self.format_var)
@@ -81,9 +98,10 @@ class AutoClipperApp(ctk.CTk):
 
     def start_task(self):
         url = self.url_var.get().strip()
-        if not url:
-            messagebox.showerror("Error", "Please enter a playlist URL")
+        if not url or not url.startswith("http"):
+            messagebox.showerror("Error", "Please enter a valid playlist URL")
             return
+        self.log("Downloading...")
         self.start_btn.configure(state="disabled")
         self.cancel_btn.configure(state="normal")
         t = threading.Thread(target=self.worker, daemon=True)
@@ -93,7 +111,7 @@ class AutoClipperApp(ctk.CTk):
         try:
             output = Path("output")
             output.mkdir(exist_ok=True)
-            download_and_clip_playlist(
+            clips = download_and_clip_playlist(
                 url=self.url_var.get().strip(),
                 output_dir=output,
                 clip_length=int(self.clip_len_var.get()),
@@ -103,7 +121,10 @@ class AutoClipperApp(ctk.CTk):
                 format=self.format_var.get(),
                 progress_callback=self.update_progress,
             )
-            self.log("Completed.")
+            if clips:
+                self.log("Clipping complete.")
+            else:
+                self.log("No clips were generated. Please check your link or settings.")
         except Exception as e:
             self.log(f"Error: {e}")
         finally:
@@ -120,7 +141,15 @@ class AutoClipperApp(ctk.CTk):
     def open_output(self):
         output = Path("output")
         output.mkdir(exist_ok=True)
-        os.startfile(output)
+        if any(output.glob("**/*")):
+            if sys.platform == "win32":
+                os.startfile(output)
+            elif sys.platform == "darwin":
+                subprocess.call(["open", str(output)])
+            else:
+                subprocess.call(["xdg-open", str(output)])
+        else:
+            messagebox.showinfo("Info", "No clips were generated. Please check your link or settings.")
 
     def change_theme(self, mode: str):
         ctk.set_appearance_mode(mode.lower())
@@ -132,7 +161,11 @@ class AutoClipperApp(ctk.CTk):
 
 def main():
     base_dir = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
-    ensure_binaries(base_dir, lambda _m: None)
+    try:
+        ensure_binaries(base_dir, lambda _m: None)
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to load dependencies: {e}")
+        return
     app = AutoClipperApp()
     app.mainloop()
 
