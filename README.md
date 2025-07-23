@@ -4,6 +4,13 @@ AutoClipper is a standalone Windows desktop application that downloads YouTube p
 
 ![AutoClipper UI](https://github.com/user-attachments/assets/9a9fe75d-f218-4a7e-9e44-716b7e9e6145)
 
+## Download
+
+You can download the latest version of AutoClipper here:  
+👉 [Download AutoClipper.exe](https://github.com/jakeefr/AutoClipperApp/releases/latest)
+
+No Python or installation required — just download and run.
+
 ---
 
 ## Features
