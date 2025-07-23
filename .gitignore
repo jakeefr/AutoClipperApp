@@ -85,7 +85,8 @@ out
 
 # Nuxt.js
 .nuxt
-dist
+# allow packaging artifacts
+!dist/
 
 # Gatsby
 .cache/
@@ -134,3 +135,4 @@ out/
 
 # VSCode extension testing
 .vscode-test
+__pycache__/

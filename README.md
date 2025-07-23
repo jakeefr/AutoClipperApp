@@ -2,6 +2,8 @@
 
 A desktop application that downloads YouTube playlist videos and clips them into segments of specified lengths.
 
+This repository now includes a lightweight Python GUI built with `customtkinter` that mirrors the Electron version's functionality.
+
 ## Features
 
 - Download videos from YouTube playlists using yt-dlp
@@ -52,6 +54,22 @@ To build from source:
 npm install
 npm run make
 ```
+
+### Python GUI
+
+The `app/` directory contains a `customtkinter` version. Install the requirements and run `python -m app.main`:
+
+```bash
+pip install -r requirements.txt
+python -m app.main
+```
+
+### Building Windows Executable
+
+To create a standalone Windows `AutoClipper.exe` run `build_installer.bat` from a
+Windows command prompt. The script downloads required binaries and bundles
+Python using PyInstaller. The resulting executable is placed in the `dist`
+folder.
 
 ## Support
 
