@@ -64,6 +64,13 @@ pip install -r requirements.txt
 python -m app.main
 ```
 
+### Building Windows Executable
+
+To create a standalone Windows `AutoClipper.exe` run `build_installer.bat` from a
+Windows command prompt. The script downloads required binaries and bundles
+Python using PyInstaller. The resulting executable is placed in the `dist`
+folder.
+
 ## Support
 
 For issues or feature requests, please contact [github.com/jakeefr]
