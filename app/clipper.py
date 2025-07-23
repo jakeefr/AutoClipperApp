@@ -1,7 +1,51 @@
 import subprocess
 import sys
+import urllib.request
+import zipfile
 from pathlib import Path
 from typing import Callable
+
+
+def _download(url: str, dest: Path) -> None:
+    """Download a URL to the given destination path."""
+    with urllib.request.urlopen(url) as r, open(dest, "wb") as f:
+        f.write(r.read())
+
+
+def ensure_binaries(base_dir: Path, log_callback: Callable[[str], None]) -> tuple[Path, Path]:
+    """Ensure yt-dlp.exe, ffmpeg.exe and ffprobe.exe exist, downloading them if necessary."""
+    ytdlp = base_dir / "yt-dlp.exe"
+    ffmpeg = base_dir / "ffmpeg.exe"
+    ffprobe = base_dir / "ffprobe.exe"
+
+    if not ytdlp.exists():
+        log_callback("Downloading yt-dlp...")
+        _download(
+            "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe",
+            ytdlp,
+        )
+
+    if not ffmpeg.exists() or not ffprobe.exists():
+        log_callback("Downloading ffmpeg (this may take a while)...")
+        zip_path = base_dir / "ffmpeg.zip"
+        _download(
+            "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip",
+            zip_path,
+        )
+        with zipfile.ZipFile(zip_path) as zf:
+            for member in zf.namelist():
+                if member.endswith("ffmpeg.exe"):
+                    zf.extract(member, base_dir)
+                    (base_dir / member).rename(ffmpeg)
+                    break
+            for member in zf.namelist():
+                if member.endswith("ffprobe.exe"):
+                    zf.extract(member, base_dir)
+                    (base_dir / member).rename(ffprobe)
+                    break
+        zip_path.unlink(missing_ok=True)
+
+    return ytdlp, ffmpeg
 
 
 def download_and_clip_playlist(
@@ -15,14 +59,8 @@ def download_and_clip_playlist(
     progress_callback: Callable[[float], None] | None = None,
 ):
     """Download videos from the playlist and clip them."""
-    ytdlp_path = Path("yt-dlp.exe")
-    ffmpeg_path = Path("ffmpeg.exe")
-    if not ytdlp_path.exists():
-        log_callback("yt-dlp.exe not found. Please download it and place in the application directory.")
-        return
-    if not ffmpeg_path.exists():
-        log_callback("ffmpeg.exe not found. Please download it and place in the application directory.")
-        return
+    base_dir = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
+    ytdlp_path, ffmpeg_path = ensure_binaries(base_dir, log_callback)
 
     session_dir = output_dir / "session"
     session_dir.mkdir(exist_ok=True)
@@ -91,9 +129,11 @@ def download_and_clip_playlist(
 
 
 def get_duration(path: Path) -> int:
-    ffprobe = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(path)]
+    base_dir = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
+    local_ffprobe = base_dir / "ffprobe.exe"
+    ffprobe_cmd = [str(local_ffprobe if local_ffprobe.exists() else "ffprobe"), "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(path)]
     try:
-        out = subprocess.check_output(ffprobe, stderr=subprocess.STDOUT, text=True)
+        out = subprocess.check_output(ffprobe_cmd, stderr=subprocess.STDOUT, text=True)
         return int(float(out.strip()))
     except Exception:
         return 0
