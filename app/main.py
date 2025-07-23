@@ -6,8 +6,10 @@ import os
 import sys
 import subprocess
 from pathlib import Path
+from datetime import datetime
 
 from clipper import download_and_clip_playlist, ensure_binaries
+from utils import get_output_folder
 
 
 class AutoClipperApp(ctk.CTk):
@@ -32,7 +34,10 @@ class AutoClipperApp(ctk.CTk):
         self._build_ui()
 
     def _add_context_menu(self, widget):
-        menu = tk.Menu(widget, tearoff=0)
+        menu = tk.Menu(widget, tearoff=0, bg=ctk.ThemeManager.theme["CTkFrame"]["fg_color"][1],
+                       fg=ctk.ThemeManager.theme["CTkButton"]["text_color"][1],
+                       activebackground=ctk.ThemeManager.theme["CTkFrame"]["fg_color"][1],
+                       activeforeground=ctk.ThemeManager.theme["CTkButton"]["text_color"][1])
         menu.add_command(label="Cut", command=lambda: widget.event_generate("<<Cut>>"))
         menu.add_command(label="Copy", command=lambda: widget.event_generate("<<Copy>>"))
         menu.add_command(label="Paste", command=lambda: widget.event_generate("<<Paste>>"))
@@ -109,9 +114,8 @@ class AutoClipperApp(ctk.CTk):
 
     def worker(self):
         try:
-            output = Path("output")
-            output.mkdir(exist_ok=True)
-            clips = download_and_clip_playlist(
+            output = get_output_folder()
+            clips, playlist, success, skipped = download_and_clip_playlist(
                 url=self.url_var.get().strip(),
                 output_dir=output,
                 clip_length=int(self.clip_len_var.get()),
@@ -121,10 +125,14 @@ class AutoClipperApp(ctk.CTk):
                 format=self.format_var.get(),
                 progress_callback=self.update_progress,
             )
+            self.write_log(playlist, success, skipped)
             if clips:
                 self.log("Clipping complete.")
             else:
                 self.log("No clips were generated. Please check your link or settings.")
+        except RuntimeError as e:
+            self.log(str(e))
+            messagebox.showwarning("Playlist Error", str(e))
         except Exception as e:
             self.log(f"Error: {e}")
         finally:
@@ -139,8 +147,7 @@ class AutoClipperApp(ctk.CTk):
         self.progress_var.set(value)
 
     def open_output(self):
-        output = Path("output")
-        output.mkdir(exist_ok=True)
+        output = get_output_folder()
         if any(output.glob("**/*")):
             if sys.platform == "win32":
                 os.startfile(output)
@@ -150,6 +157,21 @@ class AutoClipperApp(ctk.CTk):
                 subprocess.call(["xdg-open", str(output)])
         else:
             messagebox.showinfo("Info", "No clips were generated. Please check your link or settings.")
+
+    def write_log(self, playlist: str, success: list[str], skipped: list[str]):
+        output = get_output_folder()
+        with open(output / "log.txt", "a", encoding="utf-8") as f:
+            f.write(f"Playlist: {playlist}\n")
+            f.write(f"Timestamp: {datetime.now().isoformat()}\n")
+            if success:
+                f.write("Successfully clipped:\n")
+                for s in success:
+                    f.write(f"  {s}\n")
+            if skipped:
+                f.write("Skipped:\n")
+                for s in skipped:
+                    f.write(f"  {s}\n")
+            f.write("\n")
 
     def change_theme(self, mode: str):
         ctk.set_appearance_mode(mode.lower())

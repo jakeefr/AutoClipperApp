@@ -3,6 +3,7 @@ import subprocess
 import sys
 import urllib.request
 import zipfile
+import json
 from pathlib import Path
 from typing import Callable
 
@@ -81,49 +82,76 @@ def download_and_clip_playlist(
     format: str = "mp4",
     progress_callback: Callable[[float], None] | None = None,
 ):
-    """Download videos from the playlist and clip them."""
+    """Download videos from the playlist and clip them.
+
+    Returns a tuple of ``(clips_created, playlist_title, success_list, skipped_list)``.
+    """
     base_dir = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
     ytdlp_path, ffmpeg_path = ensure_binaries(base_dir, log_callback)
+
+    browser = "chrome"
+    if sys.platform == "win32":
+        edge_path = Path(os.environ.get("USERPROFILE", "")) / "AppData" / "Local" / "Microsoft" / "Edge"
+        browser = "edge" if edge_path.exists() else "chrome"
 
     session_dir = output_dir / "session"
     session_dir.mkdir(exist_ok=True)
 
-    cmd = [
+    info_cmd = [
         str(ytdlp_path),
         url,
-        "-f", "bestvideo[ext=mp4]+bestaudio/best",
-        "--no-playlist",  # will iterate manually
-        "--print", "%(title)s|%(id)s|%(duration)s|%(ext)s|%(filename)s",
         "--skip-download",
+        "--dump-json",
+        "--cookies-from-browser", browser,
     ]
-    rc, out = _run_command(cmd, log_callback)
+    rc, out = _run_command(info_cmd, log_callback)
     if rc != 0:
-        raise RuntimeError("Failed to retrieve playlist information")
+        raise RuntimeError("Could not load playlist. This may be due to age restriction, region block, or bad link.")
+
     videos = []
+    playlist_title = url
     for line in out.strip().splitlines():
         try:
-            title, vid_id, duration, ext, filename = line.split("|")
-        except ValueError:
+            data = json.loads(line)
+        except Exception:
             continue
-        if int(float(duration)) > 20 * 60:
+        if "playlist_title" in data:
+            playlist_title = data["playlist_title"] or playlist_title
+        title = data.get("title") or data.get("id")
+        vid_id = data.get("id")
+        duration = int(float(data.get("duration") or 0))
+        if not vid_id:
+            continue
+        if duration > 20 * 60:
             log_callback(f"Skipping {title} (longer than 20 min)")
             continue
         out_file = session_dir / f"{vid_id}.{format}"
         if out_file.exists():
             log_callback(f"Using cached {out_file.name}")
-            videos.append(out_file)
+            videos.append((title, out_file))
             continue
         download_cmd = [
             str(ytdlp_path),
             f"https://www.youtube.com/watch?v={vid_id}",
             "-o", str(out_file),
+            "--cookies-from-browser", browser,
+            "-f", "bestvideo[ext=mp4]+bestaudio/best/best",
         ]
         log_callback(f"Downloading {title}")
-        _run_command(download_cmd, log_callback)
-        videos.append(out_file)
+        rc, _ = _run_command(download_cmd, log_callback)
+        if rc != 0:
+            # try fallback format
+            fallback_cmd = download_cmd[:-2] + ["-f", "best"]
+            rc, _ = _run_command(fallback_cmd, log_callback)
+            if rc != 0:
+                log_callback(f"❌ Skipped: {title} (download error)")
+                continue
+        videos.append((title, out_file))
 
     clips_created = 0
-    for video in videos:
+    success: list[str] = []
+    skipped: list[str] = []
+    for title, video in videos:
         log_callback(f"Clipping {video.name}")
         clip_index = 0
         duration = get_duration(video)
@@ -142,7 +170,11 @@ def download_and_clip_playlist(
             if mute:
                 ff_cmd += ["-an"]
             ff_cmd += [str(clip_file)]
-            _run_command(ff_cmd, log_callback)
+            rc, _ = _run_command(ff_cmd, log_callback)
+            if rc != 0:
+                log_callback(f"❌ Skipped: {title} (ffmpeg error)")
+                skipped.append(f"{title} - ffmpeg error")
+                break
             start += clip_length
             clip_index += 1
             clips_created += 1
@@ -153,8 +185,10 @@ def download_and_clip_playlist(
                 video.unlink()
             except Exception:
                 pass
+        else:
+            success.append(video.stem)
 
-    return clips_created
+    return clips_created, playlist_title, success, skipped
 
 
 def get_duration(path: Path) -> int:
