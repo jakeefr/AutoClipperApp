@@ -134,3 +134,4 @@ out/
 
 # VSCode extension testing
 .vscode-test
+__pycache__/
