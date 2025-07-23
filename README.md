@@ -60,7 +60,7 @@ The repository includes a build script that creates `AutoClipper.exe` with no Py
 2. Run:
 
 ```cmd
-build_installer.bat
+.\build_installer.bat
 ```
 
 This bundles:
