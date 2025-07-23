@@ -2,9 +2,10 @@ import customtkinter as ctk
 from tkinter import messagebox
 import threading
 import os
+import sys
 from pathlib import Path
 
-from .clipper import download_and_clip_playlist
+from .clipper import download_and_clip_playlist, ensure_binaries
 
 
 class AutoClipperApp(ctk.CTk):
@@ -130,6 +131,8 @@ class AutoClipperApp(ctk.CTk):
 
 
 def main():
+    base_dir = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
+    ensure_binaries(base_dir, lambda _m: None)
     app = AutoClipperApp()
     app.mainloop()
 
