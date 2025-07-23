@@ -5,7 +5,7 @@ import os
 import sys
 from pathlib import Path
 
-from .clipper import download_and_clip_playlist, ensure_binaries
+from clipper import download_and_clip_playlist, ensure_binaries
 
 
 class AutoClipperApp(ctk.CTk):
