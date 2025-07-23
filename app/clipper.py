@@ -104,13 +104,7 @@ def download_and_clip_playlist(
     if not confirm_binaries(ytdlp_path, ffmpeg_path, log_callback):
         raise RuntimeError("yt-dlp or ffmpeg failed to run. Please reinstall and try again.")
 
-    browser = "chrome"
-    if sys.platform == "win32":
-        edge_path = Path(os.environ.get("USERPROFILE", "")) / "AppData" / "Local" / "Microsoft" / "Edge"
-        browser = "edge" if edge_path.exists() else "chrome"
-
-    cookies_file = base_dir / "cookies.txt"
-    cookie_args = ["--cookies", str(cookies_file)] if cookies_file.exists() else ["--cookies-from-browser", browser]
+    # downloads only use public access; cookies are never loaded
 
 
     info_cmd = [
@@ -118,24 +112,16 @@ def download_and_clip_playlist(
         url,
         "--skip-download",
         "--dump-json",
-    ] + cookie_args
+    ]
     rc, out = _run_command(info_cmd, log_callback)
-    if rc != 0 and cookie_args[0] == "--cookies-from-browser" and cookies_file.exists():
-        log_callback("Browser cookie extraction failed, trying cookies.txt")
-        info_cmd = [
-            str(ytdlp_path),
-            url,
-            "--skip-download",
-            "--dump-json",
-            "--cookies", str(cookies_file),
-        ]
-        rc, out = _run_command(info_cmd, log_callback)
     if rc != 0:
-        raise RuntimeError(
-            "Could not load playlist. Login may be required. Please login to your browser or provide cookies.txt"
+        log_callback(
+            "Skipped: Requires login (private, age-restricted, or unavailable)"
         )
+        return 0, url, [], []
 
     videos = []
+    skipped: list[str] = []
     playlist_title = url
     for line in out.strip().splitlines():
         try:
@@ -161,7 +147,6 @@ def download_and_clip_playlist(
             str(ytdlp_path),
             f"https://www.youtube.com/watch?v={vid_id}",
             "-o", str(out_file),
-        ] + cookie_args + [
             "-f", "bestvideo[ext=mp4]+bestaudio/best/best",
         ]
         log_callback(f"Downloading {title}")
@@ -171,13 +156,15 @@ def download_and_clip_playlist(
             fallback_cmd = download_cmd[:-2] + ["-f", "best"]
             rc, _ = _run_command(fallback_cmd, log_callback)
             if rc != 0:
-                log_callback(f"❌ Skipped: {title} (download error)")
+                log_callback(
+                    "Skipped: Requires login (private, age-restricted, or unavailable)"
+                )
+                skipped.append(f"{title} - login required")
                 continue
         videos.append((title, out_file))
 
     clips_created = 0
     success: list[str] = []
-    skipped: list[str] = []
     for title, video in videos:
         log_callback(f"Clipping {video.name}")
         clip_index = 0

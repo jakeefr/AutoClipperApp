@@ -133,13 +133,13 @@ class AutoClipperApp(ctk.CTk):
                 progress_callback=self.update_progress,
             )
             self.write_log(playlist, success, skipped)
+            self.log(f"Skipped videos: {len(skipped)}")
             if clips:
                 self.log("Clipping complete.")
             else:
                 self.log("No clips were generated. Please check your link or settings.")
         except RuntimeError as e:
             self.log(str(e))
-            messagebox.showwarning("Playlist Error", str(e))
         except Exception as e:
             self.log(f"Error: {e}")
         finally:
@@ -189,6 +189,7 @@ class AutoClipperApp(ctk.CTk):
                 f.write("Skipped:\n")
                 for s in skipped:
                     f.write(f"  {s}\n")
+            f.write(f"Skipped videos: {len(skipped)}\n")
             f.write("\n")
 
     def change_theme(self, mode: str):
