@@ -112,13 +112,13 @@ These include:
 
 ## Contributing
 
-If you'd like to submit features, improvements, or bug fixes, feel free to open a pull request or file an issue.
+We welcome contributions! Please see the [Contributing Guidelines](CONTRIBUTING.md) for more info.
 
 ---
 
 ## License
 
-MIT License
+This project is licensed under the [MIT License](LICENSE).
 
 ---
 
