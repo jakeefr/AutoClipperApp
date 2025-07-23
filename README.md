@@ -112,16 +112,18 @@ These include:
 
 ## Contributing
 
-We welcome contributions! Please see the [Contributing Guidelines](CONTRIBUTING.md) for more info.
+If you'd like to submit features, improvements, or bug fixes, feel free to open a pull request or file an issue.  
+See full [Contributing Guidelines](CONTRIBUTING.md)
 
 ---
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+Licensed under the [MIT License](LICENSE)
 
 ---
 
 ## Contact
 
 [GitHub: jakeefr](https://github.com/jakeefr/AutoClipperApp)
+
