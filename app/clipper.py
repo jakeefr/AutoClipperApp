@@ -1,9 +1,32 @@
+import os
 import subprocess
 import sys
 import urllib.request
 import zipfile
 from pathlib import Path
 from typing import Callable
+
+
+def _run_command(cmd: list[str], log_callback: Callable[[str], None] | None = None) -> tuple[int, str]:
+    """Run a command without showing a console window and optionally log output."""
+    creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        creationflags=creationflags,
+    )
+    output_lines: list[str] = []
+    if proc.stdout:
+        for line in proc.stdout:
+            line = line.rstrip()
+            if line:
+                output_lines.append(line)
+                if log_callback:
+                    log_callback(line)
+    proc.wait()
+    return proc.returncode, "\n".join(output_lines)
 
 
 def _download(url: str, dest: Path) -> None:
@@ -73,9 +96,11 @@ def download_and_clip_playlist(
         "--print", "%(title)s|%(id)s|%(duration)s|%(ext)s|%(filename)s",
         "--skip-download",
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    rc, out = _run_command(cmd, log_callback)
+    if rc != 0:
+        raise RuntimeError("Failed to retrieve playlist information")
     videos = []
-    for line in proc.stdout.strip().splitlines():
+    for line in out.strip().splitlines():
         try:
             title, vid_id, duration, ext, filename = line.split("|")
         except ValueError:
@@ -94,9 +119,10 @@ def download_and_clip_playlist(
             "-o", str(out_file),
         ]
         log_callback(f"Downloading {title}")
-        subprocess.run(download_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        _run_command(download_cmd, log_callback)
         videos.append(out_file)
 
+    clips_created = 0
     for video in videos:
         log_callback(f"Clipping {video.name}")
         clip_index = 0
@@ -116,9 +142,10 @@ def download_and_clip_playlist(
             if mute:
                 ff_cmd += ["-an"]
             ff_cmd += [str(clip_file)]
-            subprocess.run(ff_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            _run_command(ff_cmd, log_callback)
             start += clip_length
             clip_index += 1
+            clips_created += 1
             if progress_callback and duration > 0:
                 progress_callback(min(100, (start / duration) * 100))
         if delete_original:
@@ -127,13 +154,17 @@ def download_and_clip_playlist(
             except Exception:
                 pass
 
+    return clips_created
+
 
 def get_duration(path: Path) -> int:
     base_dir = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
     local_ffprobe = base_dir / "ffprobe.exe"
     ffprobe_cmd = [str(local_ffprobe if local_ffprobe.exists() else "ffprobe"), "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(path)]
-    try:
-        out = subprocess.check_output(ffprobe_cmd, stderr=subprocess.STDOUT, text=True)
-        return int(float(out.strip()))
-    except Exception:
-        return 0
+    rc, out = _run_command(ffprobe_cmd, None)
+    if rc == 0:
+        try:
+            return int(float(out.strip()))
+        except Exception:
+            return 0
+    return 0
