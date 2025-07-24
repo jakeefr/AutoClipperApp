@@ -80,17 +80,19 @@ class AutoClipperApp(ctk.CTk):
         self.log_box.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=5, pady=5)
         self.log_box.insert("end", self.log_var.get())
         self.log_box.configure(state="disabled")
+
         url_frame = ctk.CTkFrame(main, fg_color="transparent")
         url_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
         url_frame.grid_columnconfigure(0, weight=1)
 
         self.url_entry = ctk.CTkEntry(url_frame, textvariable=self.url_var, placeholder_text="Paste playlist URL here")
         self.url_entry.grid(row=0, column=0, sticky="ew")
-
         ctk.CTkButton(url_frame, text="Copy", width=50, command=self.copy_url).grid(row=0, column=1, padx=(5, 0))
         ctk.CTkButton(url_frame, text="Paste", width=50, command=self.paste_url).grid(row=0, column=2, padx=(5, 0))
+
         self._add_context_menu(self.url_entry)
         self._add_context_menu(self.log_box)
+
         self.clip_length = ctk.CTkComboBox(main, values=["5", "10", "15", "20", "25", "30", "60"], variable=self.clip_len_var)
         self.clip_length.grid(row=2, column=0, padx=5, pady=5, sticky="ew")
         self.format_buttons = ctk.CTkSegmentedButton(main, values=["mp4", "webm", "mkv"], variable=self.format_var)
