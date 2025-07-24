@@ -4,23 +4,31 @@ import sys
 import urllib.request
 import zipfile
 import json
+import time
 from pathlib import Path
 from typing import Callable, Iterable
 
 
 def _run_command(cmd: list[str], log_callback: Callable[[str], None] | None = None) -> tuple[int, str]:
-    """Run a command without showing a console window and optionally log output."""
+    """Run a command without blocking the UI and optionally log each output line."""
     creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
+        bufsize=1,
         creationflags=creationflags,
     )
     output_lines: list[str] = []
     if proc.stdout:
-        for line in proc.stdout:
+        while True:
+            line = proc.stdout.readline()
+            if not line:
+                if proc.poll() is not None:
+                    break
+                time.sleep(0.05)
+                continue
             line = line.rstrip()
             if line:
                 output_lines.append(line)
