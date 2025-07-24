@@ -114,19 +114,20 @@ class AutoClipperApp(ctk.CTk):
         self.log_box.see("end")
 
     def process_queues(self):
-        # process a limited number of log messages per iteration to keep the
-        # event loop snappy even if many lines are queued
+        # Process a limited number of log messages per iteration
         for _ in range(20):
             if self.log_queue.empty():
                 break
             msg = self.log_queue.get_nowait()
             self.log(msg)
-        # always take the latest progress update if multiple are queued
+
+        # Only take latest progress update if multiple exist
         last = None
         while not self.progress_queue.empty():
             last = self.progress_queue.get_nowait()
         if last is not None:
             self.progress_var.set(last)
+
         self.after(100, self.process_queues)
 
     def start_task(self):
@@ -160,9 +161,7 @@ class AutoClipperApp(ctk.CTk):
             if clips:
                 self.log_queue.put("Clipping complete.")
             else:
-                self.log_queue.put(
-                    "No clips were generated. Please check your link or settings."
-                )
+                self.log_queue.put("No clips were generated. Please check your link or settings.")
         except RuntimeError as e:
             self.log_queue.put(str(e))
         except Exception as e:
