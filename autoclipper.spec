@@ -5,7 +5,11 @@ a = Analysis(
     ['app\\main.py'],
     pathex=[],
     binaries=[],
-    datas=[('ffmpeg.exe', '.'), ('ffprobe.exe', '.'), ('yt-dlp.exe', '.')],
+    datas=[
+        ('bin/ffmpeg.exe', 'bin'),
+        ('bin/ffprobe.exe', 'bin'),
+        ('bin/yt-dlp.exe', 'bin')
+    ],
     hiddenimports=['customtkinter'],
     hookspath=[],
     hooksconfig={},
@@ -14,6 +18,7 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
+
 pyz = PYZ(a.pure)
 
 exe = EXE(
