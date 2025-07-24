@@ -2,6 +2,7 @@ import customtkinter as ctk
 from tkinter import messagebox
 import tkinter as tk
 import threading
+import queue
 import os
 import sys
 import subprocess
@@ -30,6 +31,10 @@ class AutoClipperApp(ctk.CTk):
         self.delete_var = ctk.BooleanVar()
         self.format_var = ctk.StringVar(value="mp4")
         self.progress_var = ctk.DoubleVar()
+
+        self.log_queue: queue.Queue[str] = queue.Queue()
+        self.progress_queue: queue.Queue[float] = queue.Queue()
+        self.after(100, self.process_queues)
 
         self._build_ui()
 
@@ -108,6 +113,22 @@ class AutoClipperApp(ctk.CTk):
         self.log_box.configure(state="disabled")
         self.log_box.see("end")
 
+    def process_queues(self):
+        # process a limited number of log messages per iteration to keep the
+        # event loop snappy even if many lines are queued
+        for _ in range(20):
+            if self.log_queue.empty():
+                break
+            msg = self.log_queue.get_nowait()
+            self.log(msg)
+        # always take the latest progress update if multiple are queued
+        last = None
+        while not self.progress_queue.empty():
+            last = self.progress_queue.get_nowait()
+        if last is not None:
+            self.progress_var.set(last)
+        self.after(100, self.process_queues)
+
     def start_task(self):
         url = self.url_var.get().strip()
         if not url or not url.startswith("http"):
@@ -116,6 +137,8 @@ class AutoClipperApp(ctk.CTk):
         self.log("Downloading...")
         self.start_btn.configure(state="disabled")
         self.cancel_btn.configure(state="normal")
+        self.log_queue = queue.Queue()
+        self.progress_queue = queue.Queue()
         t = threading.Thread(target=self.worker, daemon=True)
         t.start()
 
@@ -126,32 +149,37 @@ class AutoClipperApp(ctk.CTk):
                 url=self.url_var.get().strip(),
                 output_dir=output,
                 clip_length=int(self.clip_len_var.get()),
-                log_callback=self.log,
+                log_callback=self.log_queue.put,
                 mute=self.mute_var.get(),
                 delete_original=self.delete_var.get(),
                 format=self.format_var.get(),
-                progress_callback=self.update_progress,
+                progress_callback=self.progress_queue.put,
             )
             self.write_log(playlist, success, skipped)
-            self.log(f"Skipped videos: {len(skipped)}")
+            self.log_queue.put(f"Skipped videos: {len(skipped)}")
             if clips:
-                self.log("Clipping complete.")
+                self.log_queue.put("Clipping complete.")
             else:
-                self.log("No clips were generated. Please check your link or settings.")
+                self.log_queue.put(
+                    "No clips were generated. Please check your link or settings."
+                )
         except RuntimeError as e:
-            self.log(str(e))
+            self.log_queue.put(str(e))
         except Exception as e:
-            self.log(f"Error: {e}")
+            self.log_queue.put(f"Error: {e}")
         finally:
-            self.start_btn.configure(state="normal")
-            self.cancel_btn.configure(state="disabled")
-            self.progress_var.set(0)
+            self.after(0, self.task_done)
 
     def cancel_task(self):
         messagebox.showinfo("Cancel", "Cancellation is not implemented yet.")
 
     def update_progress(self, value: float):
         self.progress_var.set(value)
+
+    def task_done(self):
+        self.start_btn.configure(state="normal")
+        self.cancel_btn.configure(state="disabled")
+        self.progress_var.set(0)
 
     def copy_url(self):
         url = self.url_entry.get()

@@ -5,7 +5,7 @@ import urllib.request
 import zipfile
 import json
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Iterable
 
 
 def _run_command(cmd: list[str], log_callback: Callable[[str], None] | None = None) -> tuple[int, str]:
@@ -30,43 +30,77 @@ def _run_command(cmd: list[str], log_callback: Callable[[str], None] | None = No
     return proc.returncode, "\n".join(output_lines)
 
 
-def _download(url: str, dest: Path) -> None:
-    """Download a URL to the given destination path."""
-    with urllib.request.urlopen(url) as r, open(dest, "wb") as f:
-        f.write(r.read())
+def _download(url: str, dest: Path, log_callback: Callable[[str], None] | None = None) -> bool:
+    """Download a URL to the given destination path. Returns True on success."""
+    try:
+        with urllib.request.urlopen(url) as r, open(dest, "wb") as f:
+            f.write(r.read())
+        return True
+    except Exception as e:
+        if log_callback:
+            log_callback(f"Failed to download {url}: {e}")
+        return False
+
+
+def _download_first(urls: Iterable[str], dest: Path, log_callback: Callable[[str], None] | None = None) -> bool:
+    for url in urls:
+        if _download(url, dest, log_callback):
+            return True
+    return False
 
 
 def ensure_binaries(base_dir: Path, log_callback: Callable[[str], None]) -> tuple[Path, Path]:
-    """Ensure yt-dlp.exe, ffmpeg.exe and ffprobe.exe exist, downloading them if necessary."""
-    ytdlp = base_dir / "yt-dlp.exe"
-    ffmpeg = base_dir / "ffmpeg.exe"
-    ffprobe = base_dir / "ffprobe.exe"
+    """Ensure yt-dlp.exe, ffmpeg.exe and ffprobe.exe exist in a bin directory."""
+    bin_dir = base_dir / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    ytdlp = bin_dir / "yt-dlp.exe"
+    ffmpeg = bin_dir / "ffmpeg.exe"
+    ffprobe = bin_dir / "ffprobe.exe"
 
     if not ytdlp.exists():
         log_callback("Downloading yt-dlp...")
-        _download(
+        if not _download(
             "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe",
             ytdlp,
-        )
+            log_callback,
+        ):
+            raise RuntimeError(
+                "Could not download yt-dlp. Place yt-dlp.exe in the bin folder and restart."
+            )
 
     if not ffmpeg.exists() or not ffprobe.exists():
         log_callback("Downloading ffmpeg (this may take a while)...")
-        zip_path = base_dir / "ffmpeg.zip"
-        _download(
+        zip_path = bin_dir / "ffmpeg.zip"
+        ffmpeg_sources = [
             "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip",
-            zip_path,
-        )
-        with zipfile.ZipFile(zip_path) as zf:
-            for member in zf.namelist():
-                if member.endswith("ffmpeg.exe"):
-                    zf.extract(member, base_dir)
-                    (base_dir / member).rename(ffmpeg)
-                    break
-            for member in zf.namelist():
-                if member.endswith("ffprobe.exe"):
-                    zf.extract(member, base_dir)
-                    (base_dir / member).rename(ffprobe)
-                    break
+            "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip",
+        ]
+        if _download_first(ffmpeg_sources, zip_path, log_callback):
+            with zipfile.ZipFile(zip_path) as zf:
+                for member in zf.namelist():
+                    if member.endswith("ffmpeg.exe"):
+                        zf.extract(member, bin_dir)
+                        (bin_dir / member).rename(ffmpeg)
+                        break
+                for member in zf.namelist():
+                    if member.endswith("ffprobe.exe"):
+                        zf.extract(member, bin_dir)
+                        (bin_dir / member).rename(ffprobe)
+                        break
+            # remove extracted directories
+            for item in bin_dir.glob("ffmpeg-*"):
+                if item.is_dir():
+                    for sub in item.rglob("*"):
+                        if sub.is_file():
+                            sub.unlink()
+                    subdirs = sorted([p for p in item.rglob("*") if p.is_dir()], reverse=True)
+                    for d in subdirs:
+                        d.rmdir()
+                    item.rmdir()
+        else:
+            raise RuntimeError(
+                "Could not download ffmpeg. Place ffmpeg.exe and ffprobe.exe in the bin folder and restart."
+            )
         zip_path.unlink(missing_ok=True)
 
     return ytdlp, ffmpeg
@@ -207,7 +241,7 @@ def download_and_clip_playlist(
 
 def get_duration(path: Path) -> int:
     base_dir = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
-    local_ffprobe = base_dir / "ffprobe.exe"
+    local_ffprobe = base_dir / "bin" / "ffprobe.exe"
     ffprobe_cmd = [str(local_ffprobe if local_ffprobe.exists() else "ffprobe"), "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(path)]
     rc, out = _run_command(ffprobe_cmd, None)
     if rc == 0:
